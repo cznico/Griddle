@@ -93,6 +93,7 @@ var Griddle = React.createClass({
             "allowEmptyGrid": false,
             "showTableHeading":true,
             "showPager":true,
+            "showMoreLevel": 0,
             "useFixedHeader":false,
             "useExternal": false,
             "externalSetPage": null,
@@ -114,6 +115,7 @@ var Griddle = React.createClass({
             "isSubGriddle": false,
             "enableSort": true,
             "onRowClick": null,
+            "onPageChange": null,
             /* css class names */
             "sortAscendingClassName": "sort-ascending",
             "sortDescendingClassName": "sort-descending",
@@ -208,7 +210,7 @@ var Griddle = React.createClass({
     },
 
     /* if we have a filter display the max page and results accordingly */
-    setFilter: function(filter) {
+    setFilter: function(filter, keepPage) {
         if(this.props.useExternal) {
             this.props.externalSetFilter(filter);
             return;
@@ -216,7 +218,6 @@ var Griddle = React.createClass({
 
         var that = this,
         updatedState = {
-            page: 0,
             filter: filter
         };
 
@@ -236,6 +237,10 @@ var Griddle = React.createClass({
 
         // Set the state.
         that.setState(updatedState);
+
+        if (typeof keepPage == 'undefined' || !keepPage) {
+            that.setPage(0);
+        }
 
 		this._resetSelectedRows();
     },
@@ -304,6 +309,7 @@ var Griddle = React.createClass({
             return;
         }
 
+        var pageChanged = false;
         //check page size and move the filteredResults to pageSize * pageNumber
         if (number * this.state.resultsPerPage <= this.state.resultsPerPage * this.state.maxPage) {
             var that = this,
@@ -311,18 +317,22 @@ var Griddle = React.createClass({
                     page: number
                 };
 
-                that.setState(state);
+            that.setState(state);
+            pageChanged = true;
         }
 
-		//When infinite scrolling is enabled, uncheck the "select all" checkbox, since more unchecked rows will be appended at the end
-		if(this.props.enableInfiniteScroll) {
-			this.setState({
-				isSelectAllChecked: false
-			})
-		} else { //When the paging is done on the server, the previously selected rows on a certain page might not
-			// coincide with the new rows on that exact page page, if moving back and forth. Better reset the selection
-			this._resetSelectedRows();
-		}
+        //When infinite scrolling is enabled, uncheck the "select all" checkbox, since more unchecked rows will be appended at the end
+        if(this.props.enableInfiniteScroll) {
+          this.setState({
+            isSelectAllChecked: false
+          })
+        } else { //When the paging is done on the server, the previously selected rows on a certain page might not
+          // coincide with the new rows on that exact page page, if moving back and forth. Better reset the selection
+          this._resetSelectedRows();
+        }
+        if (pageChanged && this.props.onPageChange) {
+            this.props.onPageChange.apply(this, [number]);
+        }
     },
     setColumns: function(columns){
         this.columnSettings.filteredColumns = isArray(columns) ? columns : [columns];
@@ -374,7 +384,7 @@ var Griddle = React.createClass({
 		this._resetSelectedRows();
     },
     componentWillReceiveProps: function(nextProps) {
-        this.setMaxPage(nextProps.results);
+        this.setFilter(this.state.filter, true);
         if (nextProps.resultsPerPage !== this.props.resultsPerPage) {
             this.setPageSize(nextProps.resultsPerPage);
         }
@@ -576,8 +586,9 @@ var Griddle = React.createClass({
                   data = first(data, (currentPage + 1) * this.state.resultsPerPage);
                 } else {
                   //the 'rest' is grabbing the whole array from index on and the 'initial' is getting the first n results
-                  var rest = drop(data, currentPage * this.state.resultsPerPage);
-                  data = (dropRight || initial)(rest, rest.length-this.state.resultsPerPage);
+                  var moreLevel = this.props.showMoreLevel;
+                  var rest = drop(data, (currentPage - moreLevel) * this.state.resultsPerPage);
+                  data = (dropRight || initial)(rest, rest.length - (this.state.resultsPerPage * (moreLevel + 1)));
                 }
             }
 
@@ -604,7 +615,11 @@ var Griddle = React.createClass({
       return this.state.filteredResults || this.props.results;
     },
     getCurrentPage: function(){
-      return this.props.externalCurrentPage||this.state.page;
+        var currentPage = this.state.page;
+        var maxPage = this.getCurrentMaxPage();
+        currentPage = Math.min(maxPage - 1, currentPage + this.props.showMoreLevel);
+
+        return this.props.externalCurrentPage || currentPage;
     },
     getCurrentSort: function(){
         return this.props.useExternal ? this.props.externalSortColumn : this.state.sortColumn;

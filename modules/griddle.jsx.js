@@ -1,10 +1,10 @@
 /*
-   Griddle - Simple Grid Component for React
-   https://github.com/DynamicTyped/Griddle
-   Copyright (c) 2014 Ryan Lanciaux | DynamicTyped
+ Griddle - Simple Grid Component for React
+ https://github.com/DynamicTyped/Griddle
+ Copyright (c) 2014 Ryan Lanciaux | DynamicTyped
 
-   See License / Disclaimer https://raw.githubusercontent.com/DynamicTyped/Griddle/master/LICENSE
-*/
+ See License / Disclaimer https://raw.githubusercontent.com/DynamicTyped/Griddle/master/LICENSE
+ */
 'use strict';
 
 var _extends = Object.assign || function (target) {
@@ -21,6 +21,7 @@ var React = require('react');
 var GridTable = require('./gridTable.jsx');
 var GridFilter = require('./gridFilter.jsx');
 var GridPagination = require('./gridPagination.jsx');
+var GridShowMore = require('./gridShowMore.jsx');
 var GridSettings = require('./gridSettings.jsx');
 var GridNoData = require('./gridNoData.jsx');
 var GridRow = require('./gridRow.jsx');
@@ -58,6 +59,7 @@ var Griddle = React.createClass({
         GridTable: GridTable,
         GridFilter: GridFilter,
         GridPagination: GridPagination,
+        GridShowMore: GridShowMore,
         GridSettings: GridSettings,
         GridRow: GridRow
     },
@@ -76,6 +78,7 @@ var Griddle = React.createClass({
             "customRowComponentClassName": "",
             "settingsText": "Settings",
             "filterPlaceholderText": "Filter Results",
+            "showMoreText": "Show More",
             "nextText": "Next",
             "previousText": "Previous",
             "maxRowsText": "Rows per page",
@@ -107,7 +110,7 @@ var Griddle = React.createClass({
             "allowEmptyGrid": false,
             "showTableHeading": true,
             "showPager": true,
-            "showMoreLevel": 0,
+            "showMore": false,
             "useFixedHeader": false,
             "useExternal": false,
             "externalSetPage": null,
@@ -136,6 +139,7 @@ var Griddle = React.createClass({
             "parentRowCollapsedClassName": "parent-row",
             "parentRowExpandedClassName": "parent-row expanded",
             "settingsToggleClassName": "settings",
+            "showMoreClassName": "griddle-showmore",
             "nextClassName": "griddle-next",
             "previousClassName": "griddle-previous",
             "headerStyles": {},
@@ -148,6 +152,7 @@ var Griddle = React.createClass({
             "settingsIconComponent": "",
             "nextIconComponent": "",
             "previousIconComponent": "",
+            "showMoreIconComponent": "",
             "isMultipleSelection": false, //currently does not support subgrids
             "selectedRowIds": [],
             "uniqueIdentifier": "id"
@@ -240,7 +245,6 @@ var Griddle = React.createClass({
 
         // Set the state.
         that.setState(updatedState);
-
         if (typeof keepPage == 'undefined' || !keepPage) {
             that.setPage(0);
         }
@@ -333,6 +337,16 @@ var Griddle = React.createClass({
         if (pageChanged && this.props.onPageChange) {
             this.props.onPageChange.apply(this, [number]);
         }
+
+        this.setState({
+            moreLevel: 0
+        });
+    },
+    addMoreLevel: function addMoreLevel() {
+        var newLevel = this.state.moreLevel + 1;
+        this.setState({
+            moreLevel: newLevel
+        });
     },
     setColumns: function setColumns(columns) {
         this.columnSettings.filteredColumns = isArray(columns) ? columns : [columns];
@@ -350,7 +364,7 @@ var Griddle = React.createClass({
     previousPage: function previousPage() {
         var currentPage = this.getCurrentPage();
         if (currentPage > 0) {
-            this.setPage(currentPage - 1);
+            this.setPage(Math.max(0, currentPage - this.state.moreLevel - 1));
         }
     },
     changeSort: function changeSort(column) {
@@ -427,6 +441,7 @@ var Griddle = React.createClass({
         var state = {
             maxPage: 0,
             page: 0,
+            moreLevel: 0,
             filteredResults: null,
             filteredColumns: [],
             filter: "",
@@ -576,7 +591,7 @@ var Griddle = React.createClass({
                 data = first(data, (currentPage + 1) * this.state.resultsPerPage);
             } else {
                 //the 'rest' is grabbing the whole array from index on and the 'initial' is getting the first n results
-                var moreLevel = this.props.showMoreLevel;
+                var moreLevel = this.state.moreLevel;
                 var rest = drop(data, (currentPage - moreLevel) * this.state.resultsPerPage);
                 data = (dropRight || initial)(rest, rest.length - this.state.resultsPerPage * (moreLevel + 1));
             }
@@ -609,7 +624,7 @@ var Griddle = React.createClass({
     getCurrentPage: function getCurrentPage() {
         var currentPage = this.state.page;
         var maxPage = this.getCurrentMaxPage();
-        currentPage = Math.min(maxPage - 1, currentPage + this.props.showMoreLevel);
+        currentPage = Math.min(maxPage - 1, currentPage + this.state.moreLevel);
 
         return this.props.externalCurrentPage || currentPage;
     },
@@ -791,6 +806,21 @@ var Griddle = React.createClass({
 
         return React.createElement('div', { className: 'top-section', style: topContainerStyles }, React.createElement('div', { className: 'griddle-filter', style: filterStyles }, filter), React.createElement('div', { className: 'griddle-settings-toggle', style: settingsStyles }, settings));
     },
+    getMoreSection: function getMoreSection(currentPage, maxPage) {
+        if ((this.props.showMore && !this.isInfiniteScrollEnabled() && !this.shouldUseCustomGridComponent()) === false) {
+            return undefined;
+        }
+
+        return React.createElement('div', { className: 'griddle-showmore' }, React.createElement(GridShowMore, {
+            useGriddleStyles: this.props.useGriddleStyles,
+            showMoreClassName: this.props.showMoreClassName,
+            showMoreIconComponent: this.props.showMoreIconComponent,
+            currentPage: currentPage,
+            maxPage: maxPage,
+            addMoreLevel: this.addMoreLevel,
+            showMoreText: this.props.showMoreText
+        }));
+    },
     getPagingSection: function getPagingSection(currentPage, maxPage) {
         if ((this.props.showPager && !this.isInfiniteScrollEnabled() && !this.shouldUseCustomGridComponent()) === false) {
             return undefined;
@@ -808,12 +838,12 @@ var Griddle = React.createClass({
     getCustomGridSection: function getCustomGridSection() {
         return React.createElement(this.props.customGridComponent, _extends({ data: this.props.results, className: this.props.customGridComponentClassName }, this.props.gridMetadata));
     },
-    getCustomRowSection: function getCustomRowSection(data, cols, meta, pagingContent, globalData) {
+    getCustomRowSection: function getCustomRowSection(data, cols, meta, showMoreContent, pagingContent, globalData) {
         return React.createElement('div', null, React.createElement(CustomRowComponentContainer, { data: data, columns: cols, metadataColumns: meta, globalData: globalData,
             className: this.props.customRowComponentClassName, customComponent: this.props.customRowComponent,
-            style: this.props.useGriddleStyles ? this.getClearFixStyles() : null }), this.props.showPager && pagingContent);
+            style: this.props.useGriddleStyles ? this.getClearFixStyles() : null }), showMoreContent, this.props.showPager && pagingContent);
     },
-    getStandardGridSection: function getStandardGridSection(data, cols, meta, pagingContent, hasMorePages) {
+    getStandardGridSection: function getStandardGridSection(data, cols, meta, showMoreContent, pagingContent, hasMorePages) {
         var sortProperties = this.getSortObject();
         var multipleSelectionProperties = this.getMultipleSelectionObject();
 
@@ -834,6 +864,7 @@ var Griddle = React.createClass({
             useFixedLayout: this.props.useFixedLayout,
             showPager: this.props.showPager,
             pagingContent: pagingContent,
+            showMoreContent: showMoreContent,
             data: data,
             className: this.props.tableClassName,
             enableInfiniteScroll: this.isInfiniteScrollEnabled(),
@@ -853,13 +884,13 @@ var Griddle = React.createClass({
             hasMorePages: hasMorePages,
             onRowClick: this.props.onRowClick }));
     },
-    getContentSection: function getContentSection(data, cols, meta, pagingContent, hasMorePages, globalData) {
+    getContentSection: function getContentSection(data, cols, meta, showMoreContent, pagingContent, hasMorePages, globalData) {
         if (this.shouldUseCustomGridComponent() && this.props.customGridComponent !== null) {
             return this.getCustomGridSection();
         } else if (this.shouldUseCustomRowComponent()) {
-            return this.getCustomRowSection(data, cols, meta, pagingContent, globalData);
+            return this.getCustomRowSection(data, cols, meta, showMoreContent, pagingContent, globalData);
         } else {
-            return this.getStandardGridSection(data, cols, meta, pagingContent, hasMorePages);
+            return this.getStandardGridSection(data, cols, meta, showMoreContent, pagingContent, hasMorePages);
         }
     },
     getNoDataSection: function getNoDataSection() {
@@ -911,7 +942,9 @@ var Griddle = React.createClass({
         // Grab the paging content if it's to be displayed
         var pagingContent = this.getPagingSection(currentPage, maxPage);
 
-        var resultContent = this.getContentSection(data, cols, meta, pagingContent, hasMorePages, this.props.globalData);
+        var showMoreContent = this.getMoreSection(currentPage, maxPage);
+
+        var resultContent = this.getContentSection(data, cols, meta, this.props.showMore ? showMoreContent : null, pagingContent, hasMorePages, this.props.globalData);
 
         var columnSelector = this.getColumnSelectorSection(keys, cols);
 
